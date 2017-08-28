@@ -1,0 +1,4 @@
+dice==1.1.1
+
+-e git+https://github.com/CptSpaceToaster/python-rtmbot.git
+

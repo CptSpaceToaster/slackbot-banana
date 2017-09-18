@@ -46,11 +46,26 @@ class BananaPlugin(Plugin):
         logging.info("Done with initialization")
 
     def register_users(self):
-        # ask slack's API for all users
         logging.info("Registering users")
+        # this is hella unsafe
         for user in self.slack_client.api_call('users.list')['members']:
             self.users[user['id']] = user
         logging.info("Registered {0} users".format(len(self.users)))
+
+    def process_reaction_added(self, data):
+        if (data['reaction'] == 'banana'):
+            if (data['user'] != data['item_user']):
+                player = self.get_player(data['user'])
+                self.add_banana(player)
+
+    def get_player(self, user_id):
+        # Register players we haven't seen yet
+        if user_id not in self.players:
+            logging.info("Registering new player: {0}".format(user_id))
+            # super hella unsafe
+            response = self.slack_client.api_call('im.open', user=user_id)
+            self.players[user_id] = Player(response['channel']['id'])
+        return self.players[user_id]
 
     def process_message(self, data):
         user_id = data.get('user', None)
@@ -62,13 +77,7 @@ class BananaPlugin(Plugin):
         if 'reply_to' in data:
             return
 
-        # Register players we haven't seen yet
-        if user_id not in self.players:
-            logging.info("Registering new player: {0}".format(user_id))
-            self.players[user_id] = Player(data['channel'])
-
-        player = self.players[data['user']]
-
+        player = self.get_player(data['user'])
         text = data['text']
         user = self.users.get(user_id, None)
         if user is not None:
@@ -92,9 +101,7 @@ class BananaPlugin(Plugin):
             elif text.startswith('look') or text == 'l':
                 self.respond(player.im, "Nothing here but us bananas!")
             elif text.startswith('get banana'):
-                i = player.inventory.get('banana', Banana(qty=0))
-                i.qty += 1
-                player.inventory['banana'] = i
+                self.add_banana(player)
                 self.respond(player.im, "You picked up a banana!")
             elif text.startswith('use banana'):
                 i = player.inventory.get('banana', Banana(qty=0))
@@ -109,6 +116,11 @@ class BananaPlugin(Plugin):
                     self.respond(player.im, 'You do not have any bananas to use right now')
             else:
                 self.respond(player.im, 'I don\'t understand what you are trying to say.')
+
+    def add_banana(self, player):
+        i = player.inventory.get('banana', Banana(qty=0))
+        i.qty += 1
+        player.inventory['banana'] = i
 
     def respond(self, room, text):
         self.outputs.append([room, text])
